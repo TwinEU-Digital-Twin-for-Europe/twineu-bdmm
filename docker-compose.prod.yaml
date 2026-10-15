@@ -1,0 +1,168 @@
+version: '3.8'
+
+services:
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-user}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS:-password}
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  api_service:
+    image: ptriantis/bdmm-data-api:latest
+    container_name: api_service
+    ports:
+      - "${API_PORT:-8000}:${API_PORT:-8000}"
+    environment:
+      API_PORT: ${API_PORT:-8000}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: "5672"
+      RABBITMQ_USER: ${RABBITMQ_USER:-user}
+      RABBITMQ_PASS: ${RABBITMQ_PASS:-password}
+      RABBITMQ_QUEUE: sensor-ingest
+      # Storage Backend Awareness
+      # Options: 'minio', 'local', 'azure'
+      STORAGE_BACKEND: ${STORAGE_BACKEND:-local}
+      LOCAL_STORAGE_PATH: ${LOCAL_STORAGE_PATH:-/data/staging}
+
+      # Edge API Security Configs
+      REQUIRE_MIDDLEWARE_AUTH: ${REQUIRE_MIDDLEWARE_AUTH:-false}
+      MIDDLEWARE_AUTH_CURRENT_URL: ${MIDDLEWARE_AUTH_CURRENT_URL}
+      TOKEN_CACHE_TTL: ${TOKEN_CACHE_TTL:-300}
+      
+      # MinIO Credentials for Cleanup
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-http://minio:9000}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+      MINIO_REGION: ${MINIO_REGION:-us-east-1}
+      RAW_DATA_CONTAINER: ${RAW_DATA_CONTAINER:-raw-data}
+      
+      # NiFi Batch Integration
+      NIFI_INPUT_DIR: ${NIFI_INPUT_DIR:-/data/input}
+    volumes:
+      - ./local_staging:/data/staging
+      # Mounting NiFi input drive for remote batch uploads
+      - ./nifi_input:/data/input
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  consumer_service:
+    image: ptriantis/bdmm-data-consumer:latest
+    container_name: consumer_service
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: "5672"
+      RABBITMQ_USER: ${RABBITMQ_USER:-user}
+      RABBITMQ_PASS: ${RABBITMQ_PASS:-password}
+      RABBITMQ_QUEUE: sensor-ingest
+      RABBITMQ_PREFETCH: "10"
+      
+      # Storage Routing
+      # Options: 'minio', 'local', 'azure'
+      STORAGE_BACKEND: ${STORAGE_BACKEND:-local}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-http://minio:9000}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+      MINIO_REGION: ${MINIO_REGION:-us-east-1}
+      LOCAL_STORAGE_PATH: ${LOCAL_STORAGE_PATH:-/data/staging}
+      AZURE_STORAGE_CONNECTION_STRING: ${AZURE_STORAGE_CONNECTION_STRING:-}
+      
+      RAW_DATA_CONTAINER: ${RAW_DATA_CONTAINER:-raw-data}
+      BATCH_DATA_CONTAINER: ${BATCH_DATA_CONTAINER:-batch-data}
+    volumes:
+      - ./local_staging:/data/staging
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Local MinIO (starts only with 'make up-with-minio')
+  minio:
+    image: minio/minio:latest
+    container_name: minio
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
+    volumes:
+      - minio-data:/data
+    profiles:
+      - include_minio
+
+  # Apache NiFi for Batch Ingestion
+  nifi:
+    image: apache/nifi:latest
+    container_name: nifi
+    ports:
+      - "8080:8080"
+      - "9443:9443"
+    environment:
+      NIFI_WEB_HTTP_PORT: 8080
+      NIFI_WEB_HTTPS_PORT: 9443
+      SINGLE_USER_CREDENTIALS_USERNAME: ${NIFI_USER:-admin}
+      SINGLE_USER_CREDENTIALS_PASSWORD: ${NIFI_PASS:-admin1234567}
+    volumes:
+      - nifi-data:/opt/nifi/nifi-current/data
+      - nifi-conf:/opt/nifi/nifi-current/conf
+      - ./nifi_input:/data/input
+      - ./local_staging:/data/staging
+
+  filebrowser:
+    image: filebrowser/filebrowser:s6
+    container_name: filebrowser
+    ports:
+      - "8081:80" # Maps to port 8081 so it doesn't conflict with API or NiFi
+    volumes:
+      - ./local_staging:/srv # Mounts local storage directly to the UI
+    environment:
+      - FB_NOAUTH=true # Disables the login screen for easy local testing
+    restart: unless-stopped
+
+  # ---------------------------------------------------------
+  # AI Models & Services Integration Component (AIMIC)
+  # ---------------------------------------------------------
+  ai_integration:
+    image: ptriantis/ai-integration:latest
+    container_name: ai_integration_component_bdmm
+    ports:
+      - "${AIMIC_PORT:-8100}:${AIMIC_PORT:-8100}"
+    environment:
+      AIMIC_PORT: ${AIMIC_PORT:-8100}
+      # TwinEU Catalog Credentials
+      MIDDLEWARE_URL: ${MIDDLEWARE_URL}
+      MIDDLEWARE_USER: ${MIDDLEWARE_USER}
+      MIDDLEWARE_PASS: ${MIDDLEWARE_PASS}
+      DSP_CONNECTOR_API_URL: ${DSP_CONNECTOR_API_URL}
+      
+      # Shared BDMM Storage Context
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-http://minio:9000}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      MINIO_REGION: ${MINIO_REGION:-us-east-1}
+      DB_PATH: ./data/models.db
+      MAX_FILE_SIZE_BYTES: ${MAX_FILE_SIZE_BYTES:-524288000}
+    volumes:
+      # AIMIC's internal database (do not overlap with other DBs)
+      - ./aimic_data:/app/data
+      # Shared BDMM Staging Drive for local:// URI support
+      - ./local_staging:/data/staging
+    profiles:
+      - include_aimic
+    restart: unless-stopped
+
+volumes:
+  minio-data:
+  nifi-data:
+  nifi-conf:

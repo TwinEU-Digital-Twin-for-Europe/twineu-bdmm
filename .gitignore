@@ -1,0 +1,8 @@
+nifi_input
+batch_uploads
+local_staging
+.env
+__pycache__/
+*.pyc
+.DS_Store
+aimic_data

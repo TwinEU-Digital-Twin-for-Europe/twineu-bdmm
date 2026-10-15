@@ -1,0 +1,697 @@
+{
+  "info": {
+    "name": "TwinEU Edge & Integration Services",
+    "description": "Exhaustive collection for interacting with the TwinEU BDMM Data Collection API and the AIMIC Publishing API at the edge.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "0. Authentication",
+      "item": [
+        {
+          "name": "Marketplace Login (Auto-Set JWT)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.collectionVariables.set(\"jwt_token\", jsonData.access_token);",
+                  "    console.log(\"JWT Token successfully updated in collection variables!\");",
+                  "} else {",
+                  "    console.error(\"Login failed. Check credentials.\");",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"admin@twineu.eu\",\n  \"password\": \"your-secure-password\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url_marketplace}}/api/auth/login",
+              "host": ["{{base_url_marketplace}}"],
+              "path": ["api", "auth", "login"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "1. BDMM (Data Collection API)",
+      "item": [
+        {
+          "name": "Ingest Batch Data (File Upload)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url_bdmm}}/ingest/batch",
+              "host": ["{{base_url_bdmm}}"],
+              "path": ["ingest", "batch"]
+            }
+          }
+        },
+        {
+          "name": "Ingest Streaming Data (JSON Payload)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sensor_id\": \"wind_turbine_01\",\n  \"timestamp\": \"2026-08-12T14:30:00Z\",\n  \"power_output_kw\": 1250.5\n}"
+            },
+            "url": {
+              "raw": "{{base_url_bdmm}}/ingest",
+              "host": ["{{base_url_bdmm}}"],
+              "path": ["ingest"]
+            }
+          }
+        },
+        {
+          "name": "Trigger Data Retention (Specific Source)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url_bdmm}}/maintenance/cleanup?source=wind_turbine_01&days_old=30",
+              "host": ["{{base_url_bdmm}}"],
+              "path": ["maintenance", "cleanup"],
+              "query": [
+                {
+                  "key": "source",
+                  "value": "wind_turbine_01",
+                  "description": "The specific source label to clean up."
+                },
+                {
+                  "key": "days_old",
+                  "value": "30",
+                  "description": "Delete files older than this many days."
+                }
+              ]
+            },
+            "description": "Deletes obsolete data for a specific source from both raw and batch containers."
+          }
+        },
+        {
+          "name": "Trigger Data Retention (Global Wipe)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url_bdmm}}/maintenance/cleanup-global?days_old=30",
+              "host": ["{{base_url_bdmm}}"],
+              "path": ["maintenance", "cleanup-global"],
+              "query": [
+                {
+                  "key": "days_old",
+                  "value": "30",
+                  "description": "Delete files older than this many days across ALL sources."
+                }
+              ]
+            },
+            "description": "Recursively deletes obsolete data across all sources in both raw and batch containers."
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. AIMIC (Publishing API)",
+      "item": [
+        {
+          "name": "1. AI Models (Zero-MLOps Engine)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "metadata_json",
+                  "value": "{\n  \"id\": \"demand-forecaster-001\",\n  \"version\": \"1.0.0\",\n  \"title\": \"Demand Forecast Model v2\",\n  \"business_object_name\": \"Forecast data (load, generation, FSP)\",\n  \"market_billable\": true,\n  \"market_price\": 0.5,\n  \"deployment_ready\": true,\n  \"workbench_artifact_type\": \"AI_MODEL\",\n  \"workbench_framework\": \"onnx\"\n}",
+                  "type": "text"
+                },
+                {
+                  "key": "file",
+                  "type": "file"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url_aimic}}/register/artifact",
+              "host": ["{{base_url_aimic}}"],
+              "path": ["register", "artifact"]
+            }
+          }
+        },
+        {
+          "name": "2. Digital Services (Raw Code Archives)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "metadata_json",
+                  "value": "{\n  \"id\": \"data-cleaner-api\",\n  \"version\": \"1.0.0\",\n  \"title\": \"Data Cleaner Service\",\n  \"business_object_name\": \"Generic\",\n  \"market_billable\": true,\n  \"market_price\": 1.2,\n  \"deployment_ready\": true,\n  \"workbench_artifact_type\": \"DIGITAL_SERVICE\",\n  \"workbench_runtime_env\": \"python\",\n  \"workbench_port\": 5000\n}",
+                  "type": "text"
+                },
+                {
+                  "key": "file",
+                  "type": "file"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url_aimic}}/register/artifact",
+              "host": ["{{base_url_aimic}}"],
+              "path": ["register", "artifact"]
+            }
+          }
+        },
+        {
+          "name": "3. Data Visualization (Auto-ETL Ad-Hoc Mode)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "metadata_json",
+                  "value": "{\n  \"id\": \"test-market-prices-viz-001\",\n  \"version\": \"1.0.0\",\n  \"title\": \"European Market Prices Dashboard\",\n  \"business_object_name\": \"Settlement Data\",\n  \"market_billable\": true,\n  \"market_price\": 0.1,\n  \"deployment_ready\": true,\n  \"workbench_artifact_type\": \"DATA_VISUALIZATION\",\n  \"workbench_engine\": \"metabase\",\n  \"workbench_provisioning_mode\": \"ad_hoc\",\n  \"workbench_port\": 3000\n}",
+                  "type": "text"
+                },
+                {
+                  "key": "file",
+                  "type": "file"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url_aimic}}/register/artifact",
+              "host": ["{{base_url_aimic}}"],
+              "path": ["register", "artifact"]
+            }
+          }
+        },
+        {
+          "name": "4. Data Visualization (Pre-Configured Archive Mode)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "metadata_json",
+                  "value": "{\n  \"id\": \"grafana-bundle-001\",\n  \"version\": \"1.0.0\",\n  \"title\": \"Interconnector Telemetry Suite\",\n  \"business_object_name\": \"Network information\",\n  \"market_billable\": true,\n  \"market_price\": 0.5,\n  \"deployment_ready\": true,\n  \"workbench_artifact_type\": \"DATA_VISUALIZATION\",\n  \"workbench_engine\": \"grafana\",\n  \"workbench_provisioning_mode\": \"archive\",\n  \"workbench_port\": 3000\n}",
+                  "type": "text"
+                },
+                {
+                  "key": "file",
+                  "type": "file"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url_aimic}}/register/artifact",
+              "host": ["{{base_url_aimic}}"],
+              "path": ["register", "artifact"]
+            }
+          }
+        },
+        {
+          "name": "5. Data Visualization (Live External Database)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "metadata_json",
+                  "value": "{\n  \"id\": \"live-sensor-viz\",\n  \"version\": \"1.0.0\",\n  \"title\": \"Live Sensor Telemetry Dashboard\",\n  \"business_object_name\": \"Meter Data\",\n  \"market_billable\": true,\n  \"market_price\": 0.2,\n  \"deployment_ready\": true,\n  \"workbench_artifact_type\": \"DATA_VISUALIZATION\",\n  \"workbench_engine\": \"grafana\",\n  \"workbench_provisioning_mode\": \"live_db\",\n  \"workbench_port\": 3000\n}",
+                  "type": "text"
+                },
+                {
+                  "key": "file",
+                  "type": "file"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url_aimic}}/register/artifact",
+              "host": ["{{base_url_aimic}}"],
+              "path": ["register", "artifact"]
+            }
+          }
+        },
+        {
+          "name": "6. Container Images (Batch Job / Data Pipeline)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "metadata_json",
+                  "value": "{\n  \"id\": \"grid-optimizer-job\",\n  \"version\": \"1.0.0\",\n  \"title\": \"Overnight Grid Optimization Task\",\n  \"business_object_name\": \"Resource  optimization information\",\n  \"market_billable\": true,\n  \"market_price\": 2.0,\n  \"deployment_ready\": true,\n  \"workbench_artifact_type\": \"CONTAINER_IMAGE\",\n  \"workbench_is_batch_job\": true,\n  \"workbench_max_runtime_seconds\": 3600\n}",
+                  "type": "text"
+                },
+                {
+                  "key": "file",
+                  "type": "file"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url_aimic}}/register/artifact",
+              "host": ["{{base_url_aimic}}"],
+              "path": ["register", "artifact"]
+            }
+          }
+        },
+        {
+          "name": "7. Container Images (Private Registry Web App)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "metadata_json",
+                  "value": "{\n  \"id\": \"proprietary-analytics-app\",\n  \"version\": \"1.0.0\",\n  \"title\": \"Proprietary Analytics UI\",\n  \"business_object_name\": \"Generic\",\n  \"market_billable\": true,\n  \"market_price\": 5.0,\n  \"deployment_ready\": true,\n  \"workbench_artifact_type\": \"CONTAINER_IMAGE\",\n  \"workbench_is_batch_job\": false,\n  \"workbench_port\": 8080,\n  \"workbench_registry_server\": \"my-private-registry.com\",\n  \"workbench_registry_username\": \"robot-deploy-user\",\n  \"workbench_registry_password\": \"secure-registry-token\"\n}",
+                  "type": "text"
+                },
+                {
+                  "key": "file",
+                  "type": "file"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url_aimic}}/register/artifact",
+              "host": ["{{base_url_aimic}}"],
+              "path": ["register", "artifact"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Services Workbench (Deployment API)",
+      "item": [
+        {
+          "name": "1. Deploy Digital Service",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{jwt_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"custom-analytics-dashboard\",\n  \"artifact_type\": \"DIGITAL_SERVICE\",\n  \"artifact_location\": \"https://data-space.eu/storage/analytics-v2.zip\",\n  \"ttl_seconds\": 86400,\n  \"artifact_metadata\": {\n    \"asset_id\": \"asset-uuid-here\"\n  },\n  \"parameters\": {\n    \"runtime_environment\": \"python\",\n    \"port\": 5000,\n    \"resources\": {\n      \"cpu\": \"500m\",\n      \"memory\": \"512Mi\",\n      \"ephemeral-storage\": \"2Gi\"\n    }\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url_workbench}}/deployments/",
+              "host": ["{{base_url_workbench}}"],
+              "path": ["deployments", ""]
+            }
+          }
+        },
+        {
+          "name": "2. Deploy AI Model",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{jwt_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"demand-forecaster-model\",\n  \"artifact_type\": \"AI_MODEL\",\n  \"artifact_location\": \"https://data-space.eu/models/weights.onnx\",\n  \"parameters\": {\n    \"framework\": \"onnx\",\n    \"resources\": {\n      \"cpu\": \"1.5\",\n      \"memory\": \"2048Mi\"\n    }\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url_workbench}}/deployments/",
+              "host": ["{{base_url_workbench}}"],
+              "path": ["deployments", ""]
+            }
+          }
+        },
+        {
+          "name": "3. Deploy Data Viz (Auto-ETL CSV/Metabase)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{jwt_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"grid-sensor-viz\",\n  \"artifact_type\": \"DATA_VISUALIZATION\",\n  \"artifact_location\": \"https://data-space.eu/datasets/hourly-metrics.csv\",\n  \"parameters\": {\n    \"engine\": \"metabase\",\n    \"provisioning_mode\": \"ad_hoc\",\n    \"port\": 3000,\n    \"resources\": {\n      \"cpu\": \"1\",\n      \"memory\": \"2048Mi\"\n    }\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url_workbench}}/deployments/",
+              "host": ["{{base_url_workbench}}"],
+              "path": ["deployments", ""]
+            }
+          }
+        },
+        {
+          "name": "4. Deploy Data Viz (Archive/Grafana)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{jwt_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"interconnector-telemetry\",\n  \"artifact_type\": \"DATA_VISUALIZATION\",\n  \"artifact_location\": \"https://data-space.eu/dashboards/grafana-bundle.zip\",\n  \"parameters\": {\n    \"engine\": \"grafana\",\n    \"provisioning_mode\": \"archive\",\n    \"port\": 3000\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url_workbench}}/deployments/",
+              "host": ["{{base_url_workbench}}"],
+              "path": ["deployments", ""]
+            }
+          }
+        },
+        {
+          "name": "5. Deploy Data Viz (Live DB)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{jwt_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"live-sensor-viz\",\n  \"artifact_type\": \"DATA_VISUALIZATION\",\n  \"artifact_location\": \"n/a\",\n  \"parameters\": {\n    \"engine\": \"grafana\",\n    \"provisioning_mode\": \"live_db\",\n    \"port\": 3000,\n    \"datasource\": {\n      \"type\": \"postgres\",\n      \"url\": \"postgres.internal.twineu.eu:5432\",\n      \"database\": \"sensors\",\n      \"user\": \"grafana_reader\",\n      \"password\": \"secure_password\"\n    }\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url_workbench}}/deployments/",
+              "host": ["{{base_url_workbench}}"],
+              "path": ["deployments", ""]
+            }
+          }
+        },
+        {
+          "name": "6. Deploy Container (Batch Job/Private Registry)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{jwt_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"grid-optimization-runner\",\n  \"artifact_type\": \"CONTAINER_IMAGE\",\n  \"artifact_location\": \"my-private-registry.com/grid/optimizer:v1.2.0\",\n  \"parameters\": {\n    \"is_batch_job\": true,\n    \"port\": 8080,\n    \"max_runtime_seconds\": 3600,\n    \"registry_server\": \"my-private-registry.com\",\n    \"registry_username\": \"robot-deploy-user\",\n    \"registry_password\": \"secure-registry-token\",\n    \"resources\": {\n      \"cpu\": \"2\",\n      \"memory\": \"3072Mi\"\n    }\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url_workbench}}/deployments/",
+              "host": ["{{base_url_workbench}}"],
+              "path": ["deployments", ""]
+            }
+          }
+        },
+        {
+          "name": "Check Deployment Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwt_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url_workbench}}/deployments/:id",
+              "host": ["{{base_url_workbench}}"],
+              "path": ["deployments", ":id"],
+              "variable": [
+                { "key": "id", "value": "deployment-uuid-here" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Terminate Deployment",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwt_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url_workbench}}/deployments/:id",
+              "host": ["{{base_url_workbench}}"],
+              "path": ["deployments", ":id"],
+              "variable": [
+                { "key": "id", "value": "deployment-uuid-here" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "List All Deployments",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwt_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url_workbench}}/deployments/?page=1&page_size=20",
+              "host": ["{{base_url_workbench}}"],
+              "path": ["deployments", ""],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "page_size", "value": "20" },
+                { "key": "status", "value": "RUNNING", "disabled": true }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Marketplace (Web3 & Discovery API)",
+      "item": [
+        {
+          "name": "1. Browse Federated Catalog",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwt_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url_marketplace}}/api/catalog/page/:page?market_billable=1",
+              "host": ["{{base_url_marketplace}}"],
+              "path": ["api", "catalog", "page", ":page"],
+              "query": [
+                {
+                  "key": "market_billable",
+                  "value": "1",
+                  "description": "MANDATORY PARAMETER. Must remain 1 to strictly filter for monetized assets."
+                }
+              ],
+              "variable": [
+                {
+                  "key": "page",
+                  "value": "0",
+                  "description": "The page index to fetch. Increment this to 1, 2, 3, etc., to paginate through the catalog."
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "2. Initialize Web3 Wallet",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{jwt_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"passphrase\": \"my_secure_passphrase\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url_marketplace}}/api/wallet/init",
+              "host": ["{{base_url_marketplace}}"],
+              "path": ["api", "wallet", "init"]
+            }
+          }
+        },
+        {
+          "name": "3. Get My Profile & Balance",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwt_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url_marketplace}}/api/me",
+              "host": ["{{base_url_marketplace}}"],
+              "path": ["api", "me"]
+            }
+          }
+        },
+        {
+          "name": "4. Fund Wallet (Testnet Faucet)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwt_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url_marketplace}}/api/wallet/fund",
+              "host": ["{{base_url_marketplace}}"],
+              "path": ["api", "wallet", "fund"]
+            }
+          }
+        },
+        {
+          "name": "5. Purchase Asset (Smart Contract)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{jwt_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"passphrase\": \"my_secure_passphrase\",\n  \"items\": [\n    {\n      \"asset_id\": \"asset-uuid-here\",\n      \"price\": 0.1,\n      \"token_uri\": \"https://twineu.eu/catalog/asset-uuid-here\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url_marketplace}}/api/buy",
+              "host": ["{{base_url_marketplace}}"],
+              "path": ["api", "buy"]
+            }
+          }
+        },
+        {
+          "name": "6. List My Purchases",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwt_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url_marketplace}}/api/purchases",
+              "host": ["{{base_url_marketplace}}"],
+              "path": ["api", "purchases"]
+            }
+          }
+        },
+        {
+          "name": "7. Download Purchased File (Stream)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwt_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url_marketplace}}/api/download/:asset_id/dataset.csv",
+              "host": ["{{base_url_marketplace}}"],
+              "path": ["api", "download", ":asset_id", "dataset.csv"],
+              "variable": [
+                { "key": "asset_id", "value": "asset-uuid-here" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "8. Trigger Deployment (Marketplace Proxy)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{jwt_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"artifact_type\": \"AI_MODEL\",\n  \"parameters\": {\n    \"framework\": \"onnx\",\n    \"resources\": {\n      \"cpu\": \"500m\",\n      \"memory\": \"1024Mi\"\n    }\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url_marketplace}}/api/deployments/:asset_id",
+              "host": ["{{base_url_marketplace}}"],
+              "path": ["api", "deployments", ":asset_id"],
+              "variable": [
+                { "key": "asset_id", "value": "asset-uuid-here" }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url_bdmm",
+      "value": "http://localhost:8000",
+      "type": "string"
+    },
+    {
+      "key": "base_url_aimic",
+      "value": "http://localhost:8100",
+      "type": "string"
+    },
+    {
+      "key": "base_url_workbench",
+      "value": "https://api.twineu-workbench.euprojects.net",
+      "type": "string"
+    },
+    {
+      "key": "base_url_marketplace",
+      "value": "https://twineu-marketplace.euprojects.net",
+      "type": "string"
+    },
+    {
+      "key": "jwt_token",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}
